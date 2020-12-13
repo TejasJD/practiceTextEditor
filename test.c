@@ -1,4 +1,4 @@
-/*** includes ***/
+/*** INCLUDES ***/
 #include <unistd.h>
 #include <termios.h>
 #include <stdlib.h>
@@ -6,13 +6,16 @@
 #include <stdio.h>
 #include <errno.h>
 
-/*** defines ***/
-#define CTRL_KEY(k) ((k) & (0x1f))
+/*** DEFINES ***/
+// CTRL_KEY macro would now allow me to convert normal char to CTRL + char
+// to do so we only keep the first five bits from lsb and strip all other bits
+// hence we do & with (1 << 5) - 1 = 32 - 1 = 31 = in binary would be 00011111
+#define CTRL_KEY(k) ((k) & ((1 << 5) - 1))
 
-/*** data ***/
+/*** DATA ***/
 struct termios orig_termios;
 
-/*** terminal ***/
+/*** TERMINAL ***/
 void die(const char *s) {
     perror(s);
     exit(1);
@@ -45,6 +48,7 @@ void enableRawMode() {
     // c local flags
     raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
 
+    // c
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
 
@@ -52,25 +56,44 @@ void enableRawMode() {
     if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) die("tcsetattr");
 }
 
-
 char editorReadKey() {
-    int nread;
+    int rd;
     char c;
-    while((nread = read(STDIN_FILENO, &c, 1)) != 1) {
-        if(nread == -1 && errno != EAGAIN) die("read");
+    while((rd = read(STDIN_FILENO, &c, 1)) != 1) {
+        if(rd == -1 && errno != EAGAIN) die("read");
     }
     return c;
 }
-/*** init ***/
+
+/*** INPUT ***/
+// this function process the pressed keys
+void editorProcessKeyPress() {
+    char c = editorReadKey();
+
+    switch (c) {
+    case CTRL_KEY('q'):
+        exit(0);
+        break;
+    }
+}
+
+/*** OUTPUT ***/
+// this function refreshes the screen for text editor
+void editorRefreshScreen() {
+    write(STDOUT_FILENO, "\x1b[2J", 4);
+}
+
+/*** INIT ***/
 int main() {
     enableRawMode();
     while(1) {
-        char c = '\0';
-        if(read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) die("read");
-        if(iscntrl(c)) printf("%d\r\n", c);
-        else printf("%d ('%c')\r\n", c, c);
-
-        if(c == 'q') break;
+        editorRefreshScreen();
+        editorProcessKeyPress();
+        // char c;
+        // if(read(STDIN_FILENO, &c, 1) == -1) die("read");
+        // if(iscntrl(c)) printf("%d\r\n", c);
+        // else printf("%d ('%c')\r\n", c, c);
+        // if(c == 'q') exit(0);  
     }
     return 0;
 }
